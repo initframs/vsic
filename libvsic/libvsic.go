@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const Version = "0.1.0"
+
 type Config struct {
 	MaxMsgSize int
 	TimeoutSec int
