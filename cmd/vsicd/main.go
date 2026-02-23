@@ -108,12 +108,23 @@ func start() {
 	if os.Getenv("_VSICD_DAEMON") != "1" {
 		cmd := exec.Command(os.Args[0], "start")
 		cmd.Env = append(os.Environ(), "_VSICD_DAEMON=1")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+
+		logDir := filepath.Join(baseDir, "logs")
+		os.MkdirAll(logDir, 0755)
+		logFile, err := os.OpenFile(filepath.Join(logDir, "vsicd.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			fmt.Println("failed to open log file:", err)
+			return
+		}
+
+		cmd.Stdout = logFile
+		cmd.Stderr = logFile
+
 		if err := cmd.Start(); err != nil {
 			fmt.Println("failed to start daemon:", err)
 			return
 		}
+
 		fmt.Println("vsicd started in background, pid:", cmd.Process.Pid)
 		return
 	}
@@ -216,6 +227,14 @@ func (s *Server) handle(nc net.Conn) {
 	nick := s.uniqueNick(arg)
 	vconn.Nick = nick
 	client.Conn.WriteLine("HELLO " + nick)
+
+	if s.cfg.Motd != "" {
+		for _, line := range strings.Split(s.cfg.Motd, "\n") {
+			if line != "" {
+				client.Conn.WriteLine("MOTD " + line)
+			}
+		}
+	}
 
 	s.mu.Lock()
 	s.clients[nick] = client
