@@ -234,12 +234,14 @@ func (s *Server) handle(nc net.Conn) {
 
 	go s.writeLoop(client)
 
+	vconn.WriteLine("connected!")
+	
 	line, err := vconn.ReadLine()
 	if err != nil {
 		s.disconnect(client)
 		return
 	}
-
+	
 	cmd, arg := vsic.ParseCommand(line)
 	if cmd != "HELLO" || !vsic.ValidNick(arg) {
 		vconn.WriteLine("ERROR 100")
