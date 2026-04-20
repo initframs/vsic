@@ -4,4 +4,5 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    commit-message: "chore(dependabot)"
+    commit-message:
+      prefix: "chore(dependabot)"
