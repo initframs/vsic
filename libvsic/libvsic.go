@@ -59,7 +59,6 @@ func (c *Conn) ReadLine() (string, error) {
 
 	line = strings.TrimRight(line, "\r\n")
 
-	// stop multi line injection type stuff
 	if strings.Contains(line, "\n") || strings.Contains(line, "\r") {
 		return "", errors.New("invalid control chars")
 	}

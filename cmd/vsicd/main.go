@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -22,9 +23,9 @@ import (
 )
 
 type Config struct {
-	Name                 string `toml:"name"`
-	Motd                 string `toml:"motd"`
-	AllowPriviledgedPort bool   `toml:"allow_priviledged_port"`
+	Name                string `toml:"name"`
+	Motd                string `toml:"motd"`
+	AllowPrivilegedPort bool   `toml:"allow_privileged_port"`
 
 	Moderation struct {
 		Banlist string `toml:"banlist"`
@@ -78,6 +79,20 @@ func nicepanic(s string) {
 	os.Exit(1)
 }
 
+func ispidrunning(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+
+	path := "/proc/" + strconv.Itoa(pid)
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	return info.IsDir()
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("usage: vsicd [start|stop|info]")
@@ -126,6 +141,14 @@ func start() {
 		}
 
 		fmt.Println("vsicd started in background, pid:", cmd.Process.Pid)
+		time.Sleep(time.Second)
+		if !ispidrunning(cmd.Process.Pid) {
+			fmt.Println("vsicd crashed at start, the logs below may help:")
+			logFile.Seek(0, io.SeekStart)
+			io.Copy(os.Stdout, logFile)
+			fmt.Println()
+			return
+		}
 		return
 	}
 
@@ -145,9 +168,9 @@ func start() {
 	var err error
 
 	if cfg.Server.TLS.Enabled {
-		cert, err := tls.LoadX509KeyPair(expand(cfg.Server.TLS.Cert), expand(cfg.Server.TLS.Key))
-		if err != nil {
-			panic(err)
+		cert, errCert := tls.LoadX509KeyPair(expand(cfg.Server.TLS.Cert), expand(cfg.Server.TLS.Key))
+		if errCert != nil {
+			panic(errCert)
 		}
 		ln, err = tls.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.TLS.Port),
 			&tls.Config{Certificates: []tls.Certificate{cert}})
@@ -164,7 +187,7 @@ func start() {
 	go func() {
 		<-sig
 		fmt.Println("shutting down...")
-		ln.Close() // stop accepting new conns
+		ln.Close()
 
 		s.mu.Lock()
 		for _, c := range s.clients {
@@ -251,7 +274,12 @@ func (s *Server) handle(nc net.Conn) {
 		switch cmd {
 
 		case "MSG":
+			if arg == "" {
+				client.Conn.WriteLine("ERROR 101")
+				continue
+			}
 			if time.Since(client.LastMsg) < time.Second/time.Duration(max(1, s.cfg.MaxMsgsPerSec)) {
+				client.Conn.WriteLine("ERROR 200")
 				continue
 			}
 			client.LastMsg = time.Now()
@@ -264,6 +292,10 @@ func (s *Server) handle(nc net.Conn) {
 			client.Conn.WriteLine("CYA")
 			s.disconnect(client)
 			return
+
+		default:
+			client.Conn.WriteLine("ERROR 102")
+			continue
 		}
 	}
 
@@ -346,7 +378,7 @@ func loadConfig() Config {
 	// todo: more config validation
 
 	if cfg.MaxMsgSize <= 0 {
-		cfg.MaxMsgSize = 4096 // so that someone cant just nuke the entire server if MaxMsgSize isnt specified
+		cfg.MaxMsgSize = 4096
 	}
 
 	if cfg.MaxConnsPerIP <= 0 {
@@ -357,22 +389,34 @@ func loadConfig() Config {
 		cfg.MaxMsgsPerSec = 1
 	}
 
-	if !cfg.AllowPriviledgedPort {
-		cfg.AllowPriviledgedPort = false
+	if !cfg.AllowPrivilegedPort {
+		cfg.AllowPrivilegedPort = false
 	}
 
-	if cfg.Server.TLS.Port == 0 && cfg.Server.TCP.Port == 0 {
-		nicepanic("no tcp or tls port defined, nothing to do")
+	tcpOn := cfg.Server.TCP.Enabled
+	tlsOn := cfg.Server.TLS.Enabled
+	if tcpOn == tlsOn {
+		if !tcpOn {
+			nicepanic("neither server.tcp nor server.tls is enabled; enable one")
+		}
+		nicepanic("server.tcp and server.tls cannot both be enabled; enable just one")
 	}
 
-	if cfg.Server.TLS.Enabled && (cfg.Server.TLS.Cert == "" || cfg.Server.TLS.Key == "") {
-		nicepanic("tls enabled but cert or key not defined")
+	if tlsOn {
+		if cfg.Server.TLS.Port <= 0 {
+			nicepanic("tls enabled but server.tls.port is missing or invalid")
+		}
+		if cfg.Server.TLS.Cert == "" || cfg.Server.TLS.Key == "" {
+			nicepanic("tls enabled but cert or key not defined")
+		}
+	} else {
+		if cfg.Server.TCP.Port <= 0 {
+			nicepanic("tcp enabled but server.tcp.port is missing or invalid")
+		}
 	}
 
-	if ((cfg.Server.TLS.Port <= 1000 && cfg.Server.TLS.Enabled) || (cfg.Server.TCP.Port <= 1000 && cfg.Server.TCP.Enabled)) && (cfg.AllowPriviledgedPort == false) {
-		fmt.Println(cfg.Server.TLS.Port)
-		fmt.Println(cfg.Server.TCP.Port)
-		nicepanic("it looks like you're trying to run vsicd on a priviledged port (<1000). this is disabled by default, but you can enable it by setting `allow_priviledged_port` at the root of your config")
+	if ((cfg.Server.TLS.Port <= 1000 && cfg.Server.TLS.Enabled) || (cfg.Server.TCP.Port <= 1000 && cfg.Server.TCP.Enabled)) && (cfg.AllowPrivilegedPort == false) {
+		nicepanic("it looks like you're trying to run vsicd on a privileged port (<1000). this is disabled by default, but you can enable it by setting `allow_privileged_port` at the root of your config")
 	}
 
 	return cfg
@@ -386,7 +430,7 @@ func writePID() {
 func stop() {
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
-		fmt.Println("vsicd not running")
+		fmt.Println("vsicd not running, if it should be, check the logs at ~/.config/vsicd/logs/vsicd.log")
 		return
 	}
 
