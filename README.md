@@ -1,13 +1,14 @@
 # vsic
+![GitHub last commit](https://img.shields.io/github/last-commit/initframs/vsic) ![GitHub License](https://img.shields.io/github/license/initframs/vsic) ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/initframs/vsic) ![Static Badge](https://img.shields.io/badge/binary%20size-5.47MB-blue)                                                                                                                                                                                                                                                                        
 
 *very* simple internet chat
 
 ## features
 
-- simple text-based protocol
-- tiny (5.2M) and fast (starts in 0.004s, stops in 1.005s*)
-- light and customizable (toml config!)
-  > *note: start time measured as average over 128 starts/stops on Arch Linux (i7-4790k and 16GB DDR3)
+- minimal text-based protocol- no client needed, it's simple enough to be used over just plain `nc`
+- tiny (5.47M) and fast (starts in 0.004s, stops in 0.005s*)
+- easily customizable (toml config!)
+  > *note: start time measured as average over 128 starts/stops. excluding fixed sleep times in code
 
 ## vsicd
 
