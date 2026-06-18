@@ -234,7 +234,7 @@ func (s *Server) handle(nc net.Conn) {
 
 	go s.writeLoop(client)
 
-	vconn.WriteLine("connected!")
+	vconn.WriteLine("CONNECTED")
 	
 	line, err := vconn.ReadLine()
 	if err != nil {
