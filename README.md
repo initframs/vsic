@@ -72,6 +72,7 @@ the responses in the table are assuming normal behavior, they don't include case
 
 | Command            | Sent                        | Purpose                                     | Responses                                                                                                                      |
 | ------------------ | --------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `n/a`              | when connecting to a server | inform the client they've connected         | `CONNECTED`                                                                                                                    |
 | `HELLO [username]` | when connecting to a server | initiate connection and register a username | `HELLO [username]` (note that if the name is already taken, a random numerical suffix is added), followed by an `MOTD` message |
 | `MSG [msg]`        | when sending a message      | send a message for the server to broadcast  | `MSG [username]: [msg]` is sent to all clients, including the original sender                                                  |
 | `PING`             | at specific timed intervals | tcp keepalive                               | `PONG`                                                                                                                         |
